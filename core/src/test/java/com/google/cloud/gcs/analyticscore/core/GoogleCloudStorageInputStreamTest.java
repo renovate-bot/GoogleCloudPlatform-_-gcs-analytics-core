@@ -1151,6 +1151,49 @@ class GoogleCloudStorageInputStreamTest {
     assertThat(googleCloudStorageInputStream.getPos()).isEqualTo(2);
   }
 
+  @Test
+  void read_fromHead_smallObjectCachingEnabled_readBufferSizeMoreThanFileSize_caches() throws IOException {
+    GcsFileSystemOptions options =
+            GcsFileSystemOptions.createFromOptions(
+                    Map.of("analytics-core.small-file.cache.threshold-bytes", "1024"), "");
+    GcsItemId itemId =
+            GcsItemId.builder().setBucketName("test-bucket").setObjectName("test-object").build();
+    byte data[] = TestDataGenerator.createGcsData(itemId, 1024);
+    FakeGcsFileSystemImpl fakeGcsFileSystem = new FakeGcsFileSystemImpl(options);
+    googleCloudStorageInputStream =
+            GoogleCloudStorageInputStream.create(
+                    fakeGcsFileSystem, URI.create("gs://test-bucket/test-object"));
+
+    ByteBuffer readBuffer = ByteBuffer.allocate(8000);
+    int bytesRead = googleCloudStorageInputStream.read(readBuffer);
+
+    assertThat(bytesRead).isEqualTo(data.length);
+    readBuffer.limit(bytesRead).position(0);
+    assertThat(ByteBuffer.wrap(data).equals(readBuffer)).isTrue();
+    assertThat(googleCloudStorageInputStream.getPos()).isEqualTo(data.length);
+  }
+
+  @Test
+  void read_smallObjectCachingEnabled_currPosEndOfFile_returnEOF() throws IOException {
+    GcsFileSystemOptions options =
+            GcsFileSystemOptions.createFromOptions(
+                    Map.of("analytics-core.small-file.cache.threshold-bytes", "1024"), "");
+    GcsItemId itemId =
+            GcsItemId.builder().setBucketName("test-bucket").setObjectName("test-object").build();
+    byte data[] = TestDataGenerator.createGcsData(itemId, 1024);
+    FakeGcsFileSystemImpl fakeGcsFileSystem = new FakeGcsFileSystemImpl(options);
+    googleCloudStorageInputStream =
+            GoogleCloudStorageInputStream.create(
+                    fakeGcsFileSystem, URI.create("gs://test-bucket/test-object"));
+    googleCloudStorageInputStream.seek(data.length);
+
+    ByteBuffer readBuffer = ByteBuffer.allocate(8000);
+    int bytesRead = googleCloudStorageInputStream.read(readBuffer);
+
+    assertThat(bytesRead).isEqualTo(-1);
+    assertThat(readBuffer.remaining()).isEqualTo(8000);
+  }
+
   private void mockChannelReadToWriteBytes(VectoredSeekableByteChannel mockChannel, byte[] data)
       throws IOException {
     when(mockChannel.read(any(ByteBuffer.class)))

@@ -249,13 +249,10 @@ public class GoogleCloudStorageInputStream extends SeekableInputStream {
     ByteBuffer cacheView = prefetchBuffer.duplicate();
     int readStartPosition = (int) (currPosition - (fileSize - prefetchSize));
     cacheView.position(readStartPosition);
-    int bytesToRead = buffer.remaining();
-    if (bytesToRead > cacheView.remaining()) {
-      // Cache is expected to contain data till end of stream, if this happens don't read from
-      // cache.
-      // Signal End of stream.
+    if (cacheView.remaining() == 0) {
       return -1;
     }
+    int bytesToRead = Math.min(buffer.remaining(), cacheView.remaining());
     cacheView.limit(cacheView.position() + bytesToRead);
     buffer.put(cacheView);
     return bytesToRead;
