@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.2](https://github.com/GoogleCloudPlatform/gcs-analytics-core/compare/v1.1.1...v1.1.2) (2025-10-15)
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies ([#128](https://github.com/GoogleCloudPlatform/gcs-analytics-core/issues/128)) ([ffe980b](https://github.com/GoogleCloudPlatform/gcs-analytics-core/commit/ffe980bbb52d22febad52c176484ea9c18e2a062))
+* EOF issue when client requests read with larger buffer than filesize for cached small objects ([3b94dbc](https://github.com/GoogleCloudPlatform/gcs-analytics-core/commit/3b94dbc1cde466bac5a5a110244afc48e78d872e))
+* fix EOF error when readBuffer size is more than fileSize in case of small object cache ([568009f](https://github.com/GoogleCloudPlatform/gcs-analytics-core/commit/568009f0e7055b23543130487216c5e067882a83))
+
 ## [1.1.1](https://github.com/GoogleCloudPlatform/gcs-analytics-core/compare/v1.1.0...v1.1.1) (2025-10-14)
 
 
