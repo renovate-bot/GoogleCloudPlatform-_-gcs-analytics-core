@@ -24,6 +24,10 @@ public interface GcsClient {
   VectoredSeekableByteChannel openReadChannel(GcsItemInfo itemInfo, GcsReadOptions readOptions)
       throws IOException;
 
+  /** Opens a new read channel. */
+  VectoredSeekableByteChannel openReadChannel(GcsItemId itemId, GcsReadOptions readOptions)
+      throws IOException;
+
   /** Fetches object metadata. */
   GcsItemInfo getGcsItemInfo(GcsItemId itemId) throws IOException;
 

@@ -39,7 +39,8 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
   private Storage storage;
   private GcsReadOptions readOptions;
   private ReadChannel readChannel;
-  private GcsItemInfo itemInfo;
+  protected GcsItemInfo itemInfo;
+  protected GcsItemId itemId;
   private long position = 0;
   private Supplier<ExecutorService> executorServiceSupplier;
 
@@ -55,8 +56,25 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
     this.storage = storage;
     this.readOptions = readOptions;
     this.itemInfo = itemInfo;
+    this.itemId = itemInfo.getItemId();
     this.executorServiceSupplier = executorServiceSupplier;
-    this.readChannel = openReadChannel(itemInfo, readOptions);
+    this.readChannel = openReadChannel(itemId, readOptions);
+  }
+
+  GcsReadChannel(
+      Storage storage,
+      GcsItemId itemId,
+      GcsReadOptions readOptions,
+      Supplier<ExecutorService> executorServiceSupplier)
+      throws IOException {
+    checkNotNull(storage, "Storage instance cannot be null");
+    checkNotNull(itemId, "Item id cannot be null");
+    checkNotNull(executorServiceSupplier, "Thread pool supplier must not be null");
+    this.storage = storage;
+    this.readOptions = readOptions;
+    this.itemId = itemId;
+    this.executorServiceSupplier = executorServiceSupplier;
+    this.readChannel = openReadChannel(itemId, readOptions);
   }
 
   @Override
@@ -88,7 +106,10 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
 
   @Override
   public long size() throws IOException {
-    return itemInfo.getSize();
+    if (null != itemInfo) {
+      return itemInfo.getSize();
+    }
+    throw new IOException("Object metadata not initialized");
   }
 
   @Override
@@ -131,7 +152,7 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
 
   void readCombinedRange(
       GcsObjectCombinedRange combinedObjectRange, IntFunction<ByteBuffer> allocate) {
-    try (ReadChannel channel = openReadChannel(itemInfo, readOptions)) {
+    try (ReadChannel channel = openReadChannel(itemId, readOptions)) {
       validatePosition(combinedObjectRange.getOffset());
       channel.seek(combinedObjectRange.getOffset());
       ByteBuffer dataBuffer = allocate.apply(combinedObjectRange.getLength());
@@ -141,7 +162,7 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
             String.format(
                 "EOF reached while reading combinedObjectRange, range: %s, item: "
                     + "%s, numRead: %d",
-                combinedObjectRange, itemInfo.getItemId(), numOfBytesRead));
+                combinedObjectRange, itemId, numOfBytesRead));
       }
       // making it ready for reading
       dataBuffer.flip();
@@ -172,10 +193,7 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
               "EOF reached before all child ranges can be populated, "
                   + "combinedObjectRange: %s, "
                   + "expected length: %s, readBytes: %s, path: %s",
-              combinedObjectRange,
-              combinedObjectRange.getLength(),
-              numOfBytesRead,
-              itemInfo.getItemId()));
+              combinedObjectRange, combinedObjectRange.getLength(), numOfBytesRead, itemId));
     }
   }
 
@@ -194,14 +212,13 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
     }
   }
 
-  protected ReadChannel openReadChannel(GcsItemInfo itemInfo, GcsReadOptions readOptions)
+  protected ReadChannel openReadChannel(GcsItemId gcsItemId, GcsReadOptions readOptions)
       throws IOException {
-    checkArgument(
-        itemInfo.getItemId().isGcsObject(), "Expected Gcs Object but got %s", itemInfo.getItemId());
-    String bucketName = itemInfo.getItemId().getBucketName();
-    String objectName = itemInfo.getItemId().getObjectName().get();
+    checkArgument(gcsItemId.isGcsObject(), "Expected Gcs Object but got %s", gcsItemId);
+    String bucketName = gcsItemId.getBucketName();
+    String objectName = gcsItemId.getObjectName().get();
     BlobId blobId =
-        itemInfo
+        gcsItemId
             .getContentGeneration()
             .map(gen -> BlobId.of(bucketName, objectName, gen))
             .orElse(BlobId.of(bucketName, objectName));
@@ -212,9 +229,10 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
     readOptions
         .getDecryptionKey()
         .ifPresent(key -> sourceOptions.add(Storage.BlobSourceOption.decryptionKey(key)));
-    ReadChannel readChannel = storage.reader(blobId, sourceOptions.toArray(new Storage.BlobSourceOption[0]));
+    ReadChannel readChannel =
+        storage.reader(blobId, sourceOptions.toArray(new Storage.BlobSourceOption[0]));
     readOptions.getChunkSize().ifPresent(readChannel::setChunkSize);
-    
+
     return readChannel;
   }
 
@@ -222,18 +240,7 @@ class GcsReadChannel implements VectoredSeekableByteChannel {
     if (position < 0) {
       throw new EOFException(
           String.format(
-              "Invalid seek offset: position value (%d) must be >= 0 for '%s'",
-              position, itemInfo.getItemId()));
-    }
-    if (itemInfo.getSize() >= 0 && position > itemInfo.getSize()) {
-      throw new EOFException(
-          String.format(
-              "Invalid seek offset: position value (%d)"
-                  + " must be between 0 "
-                  + "and"
-                  + " %d "
-                  + "for '%s'",
-              position, itemInfo.getSize(), itemInfo.getItemId()));
+              "Invalid seek offset: position value (%d) must be >= 0 for '%s'", position, itemId));
     }
   }
 }

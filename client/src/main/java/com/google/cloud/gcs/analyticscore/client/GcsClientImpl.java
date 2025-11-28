@@ -69,6 +69,23 @@ class GcsClientImpl implements GcsClient {
   }
 
   @Override
+  public VectoredSeekableByteChannel openReadChannel(
+      GcsItemId gcsItemId, GcsReadOptions readOptions) throws IOException {
+    checkNotNull(gcsItemId, "gcsItemId should not be null");
+    checkNotNull(readOptions, "readOptions should not be null");
+    return new GcsReadChannel(storage, gcsItemId, readOptions, executorServiceSupplier) {
+      @Override
+      public long size() throws IOException {
+        if (itemInfo == null) {
+          itemInfo = getGcsItemInfo(itemId);
+          itemId = itemInfo.getItemId();
+        }
+        return itemInfo.getSize();
+      }
+    };
+  }
+
+  @Override
   public GcsItemInfo getGcsItemInfo(GcsItemId itemId) throws IOException {
     checkNotNull(itemId, "Item ID must not be null.");
     if (itemId.isGcsObject()) {
@@ -110,9 +127,14 @@ class GcsClientImpl implements GcsClient {
     if (blob == null) {
       throw new IOException("Object not found:" + itemId);
     }
-
+    GcsItemId itemIdWithGeneration =
+        GcsItemId.builder()
+            .setContentGeneration(blob.getGeneration())
+            .setBucketName(blob.getBucket())
+            .setObjectName(blob.getName())
+            .build();
     return GcsItemInfo.builder()
-        .setItemId(itemId)
+        .setItemId(itemIdWithGeneration)
         .setSize(blob.getSize())
         .setContentGeneration(blob.getGeneration())
         .build();
